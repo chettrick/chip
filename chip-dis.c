@@ -27,12 +27,22 @@ int
 main(int argc, char *argv[])
 {
 	int		fd, nr, i;
+	int		ch, qflag = 0, errors = 0;
 	uint8_t		memory[4096];
 	uint16_t	opcode;
 	char		buf[20];
 
-	argc--;
-	argv++;
+	while ((ch = getopt(argc, argv, "q")) != -1) {
+		switch (ch) {
+		case 'q':
+			qflag = 1;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
 
 	if (argc != 1) {
 		usage();
@@ -46,19 +56,25 @@ main(int argc, char *argv[])
 		err(1, "read: %s", *argv);
 	}
 
-	if (nr % 2 == 1) {
+	if ((nr % 2 == 1) && !qflag) {
 		warnx("corrupt file: %s", *argv);
+		errors++;
 	}
 
 	for (i = 0; i < nr; i += 2) {
 		opcode = memory[i] << 8;
 		opcode += memory[i + 1];
 
-		if (lookup(opcode, buf, sizeof(buf)) == -1) {
+		if ((lookup(opcode, buf, sizeof(buf)) == -1) && !qflag) {
 			warnx("illegal opcode: %04X", opcode);
+			errors++;
 		}
 
-		printf("%04X\t%s\n", opcode, buf);
+		printf("%04X\t%04X\t%s\n", i + 0x200, opcode, buf);
+	}
+
+	if (errors && !qflag) {
+		errx(1, "%d errors in file", errors);
 	}
 
 	return 0;
@@ -67,10 +83,6 @@ main(int argc, char *argv[])
 int
 lookup(uint16_t opcode, void *buf, size_t nbytes)
 {
-	char *s = "yo world!";
-
-	snprintf(buf, nbytes, "%s", s);
-
 	int fst_nibb = (opcode & 0xF000) >> 12;
 	int snd_nibb = (opcode & 0x0F00) >> 8;
 	int trd_nibb = (opcode & 0x00F0) >> 4;
@@ -240,6 +252,6 @@ usage(void)
 {
 	extern char *__progname;
 
-	fprintf(stderr, "usage: %s file\n", __progname);
+	fprintf(stderr, "usage: %s [-q] file\n", __progname);
 	exit(1);
 }
